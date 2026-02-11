@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Juegos de Ricardo - Catálogo Personal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#256af4",
+                        "background-light": "#f5f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            font-family: 'Spline Sans', sans-serif;
+        }
+        .retro-border {
+            border: 1px solid rgba(37, 106, 244, 0.2);
+        }
+        .game-card:hover {
+            border-color: #256af4;
+            transform: translateY(-2px);
+            transition: all 0.2s ease;
+        }
+        .search-container:focus-within .search-input {
+            width: 320px;
+            padding-left: 2.5rem;
+            padding-right: 0.75rem;
+            opacity: 1;
+        }
+        .search-container:focus-within .subject-filters {
+            display: flex;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .search-input {
+            width: 0;
+            padding-left: 0;
+            padding-right: 0;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .subject-filters {
+            display: none;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-display">
+<nav class="sticky top-0 z-50 bg-background-light/95 dark:bg-background-dark/95 border-b border-primary/20 backdrop-blur-sm">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div class="flex items-center justify-between h-16">
+<div class="flex items-center gap-2">
+<span class="material-icons text-primary text-3xl">grid_view</span>
+<h1 class="text-xl font-bold tracking-tight uppercase">Juegos de<span class="text-primary ml-1">Ricardo</span></h1>
+</div>
+<div class="hidden md:flex items-center space-x-8">
+<a class="text-sm font-medium hover:text-primary transition-colors border-b-2 border-primary pb-1" href="#">Recientes</a>
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Categorías</a>
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Materiales</a>
+</div>
+<div class="flex items-center gap-4">
+<div class="search-container relative flex items-center h-10">
+<button class="absolute left-0 z-10 w-10 h-10 flex items-center justify-center rounded-lg hover:bg-primary/10 text-slate-500 focus:outline-none group">
+<span class="material-symbols-outlined text-[22px] group-hover:text-primary transition-colors">search</span>
+</button>
+<input class="search-input block h-full border border-primary/20 bg-background-light dark:bg-slate-900/50 rounded-lg text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary" placeholder="Buscar actividades o asignaturas..." type="text"/>
+<div class="subject-filters absolute top-full right-0 mt-2 bg-white dark:bg-slate-900 border border-primary/20 rounded-xl p-3 shadow-2xl flex-wrap gap-2 w-72">
+<p class="text-[10px] font-bold uppercase text-slate-500 mb-2 w-full px-1">Filtrar por Asignatura</p>
+<button class="text-[11px] px-2 py-1 rounded bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 transition-all">Matemáticas</button>
+<button class="text-[11px] px-2 py-1 rounded bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 transition-all">Historia</button>
+<button class="text-[11px] px-2 py-1 rounded bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 transition-all">Ciencias</button>
+<button class="text-[11px] px-2 py-1 rounded bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 transition-all">Lengua</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</nav>
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<header class="mb-12 border-l-4 border-primary bg-primary/5 rounded-r-xl overflow-hidden relative">
+<div class="flex items-center justify-between px-6 py-6 min-h-[140px]">
+<div class="flex-1">
+<h2 class="text-3xl font-bold mb-2 leading-none">Juegos de Ricardo</h2>
+<p class="text-slate-500 dark:text-slate-400 max-w-2xl text-lg leading-tight">
+                    juegos diseñados para mis actividades educativas.
+                </p>
+</div>
+<div class="flex items-end self-stretch">
+<img alt="Avatar Ricardo" class="h-full w-auto object-contain block max-h-[100px]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAfwx3tDLVoVKrvHmEVMBDdq7mLCYI6J8mJNAYmMaZ_xkTomcsJFlFPLs4tyhRX7hkfPnkI8jpNtcteh1vovgtEiA4hCteNwNxuzNFYL-fQ7XGp7sPn7dfrnjNa70ZtXhamW_IRstLjKmAaildrKERTV0uoDV-DJWV_6UJKJD-A7sYZOfEijMcKso_sxYMc2bear-woWkzb6Igy56IfXan879qpU9dDU5TUTKi6ajdyVWhygvZIhib1JzOotQD73Vo2EqIPirHKl8w"/>
+</div>
+</div>
+</header>
+<div class="flex flex-col lg:flex-row gap-8">
+<aside class="w-full lg:w-64 shrink-0 space-y-8">
+<div>
+<h3 class="text-xs font-bold uppercase tracking-widest text-primary mb-4">Categorías Educativas</h3>
+<ul class="space-y-2">
+<li><a class="flex items-center justify-between p-2 hover:bg-primary/10 rounded-lg group text-sm" href="#"><span>Lógica</span><span class="text-xs text-slate-500">24</span></a></li>
+<li><a class="flex items-center justify-between p-2 hover:bg-primary/10 rounded-lg group text-sm" href="#"><span>Matemáticas</span><span class="text-xs text-slate-500">18</span></a></li>
+<li><a class="flex items-center justify-between p-2 hover:bg-primary/10 rounded-lg group text-sm" href="#"><span>Lenguaje</span><span class="text-xs text-slate-500">31</span></a></li>
+<li><a class="flex items-center justify-between p-2 hover:bg-primary/10 rounded-lg group text-sm" href="#"><span>Cooperativos</span><span class="text-xs text-slate-500">12</span></a></li>
+<li><a class="flex items-center justify-between p-2 hover:bg-primary/10 rounded-lg group text-sm" href="#"><span>Memoria</span><span class="text-xs text-slate-500">9</span></a></li>
+</ul>
+</div>
+</aside>
+<div class="flex-1">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-lg font-bold">Catálogo de Juegos</h3>
+<div class="flex gap-2">
+<button class="p-2 bg-primary/10 rounded text-primary hover:bg-primary hover:text-white transition-all">
+<span class="material-icons text-sm">grid_view</span>
+</button>
+<button class="p-2 hover:bg-primary/10 rounded text-slate-500 transition-all">
+<span class="material-icons text-sm">view_list</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+<div class="game-card flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+<div class="relative h-48 overflow-hidden">
+<img alt="Neon Knights" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuApxWBRq5XBWwpdY0QFVNHuYM_j6cbW4wgmpUTAOP6Hb1u51-74oq_nD5wN3Qr5-nFs-DcU8TTFmN5ZG-j2PB_BV28_67DTrzBV6L2N0qT-wPVKGA0q8g5E_TIrateehPWQ8Z63YlNUWxjS_f9o917VQ5BeWg-A3utzhnDfL8omN_AbnbsEKxz4wE4DaJVtMaU8Ngf7hz-DvUDsyUR-lz3BOb3grT7aEWWiLy8O5tLGstxnPsivypATGVn1WntNUpr-wJwIncBC2bA"/>
+<div class="absolute top-3 left-3 bg-primary text-white text-[10px] font-bold px-2 py-1 rounded uppercase">Nuevo</div>
+<div class="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-semibold px-2 py-1 rounded flex items-center gap-1">
+<span class="material-icons text-[12px]">functions</span> Matemáticas
+                        </div>
+</div>
+<div class="p-5 flex flex-col flex-1">
+<h4 class="text-lg font-bold mb-2">Caballeros de Neón</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 mb-6">
+                            Un juego de construcción de mazos rápido para practicar toma de decisiones bajo presión.
+                        </p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-xs font-semibold text-primary">2-4 Jugadores</span>
+<a class="inline-flex items-center justify-center px-4 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-bold rounded-lg transition-colors" href="#">
+                                Ver Juego
+                            </a>
+</div>
+</div>
+</div>
+<div class="game-card flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+<div class="relative h-48 overflow-hidden">
+<img alt="Forest Keepers" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCGkDwAC4qOsM1fY0-9gKqfFfjPq1YIC4pSrW4LyV0dVgV9R5cRd3lf8Mfo3yV8NxAUiNynMqmWqHPQ-K04bSQ7rpO7q-n8S8eG978CwgREl9H3gBVqllSgj7AopqpFTn6su0UgDiVn-FcX1Xc2VWce0zlI5mY7li-4ocIxmt1GSvmxfo5VBkY4IgbsE-HqMC8QvjlWLdWokLbwbtWsRNO4QdZgyQXLeY9UM4RsuyUoISb5nABVyiakpYwHwxeAx0JV9McAzKgmuG0"/>
+<div class="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-semibold px-2 py-1 rounded flex items-center gap-1">
+<span class="material-icons text-[12px]">science</span> Ciencias
+                        </div>
+</div>
+<div class="p-5 flex flex-col flex-1">
+<h4 class="text-lg font-bold mb-2">Guardianes del Bosque</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 mb-6">
+                            Gestión de recursos y conciencia ambiental en un entorno de fantasía natural.
+                        </p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-xs font-semibold text-primary">1-5 Jugadores</span>
+<a class="inline-flex items-center justify-center px-4 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-bold rounded-lg transition-colors" href="#">
+                                Ver Juego
+                            </a>
+</div>
+</div>
+</div>
+<div class="game-card flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+<div class="relative h-48 overflow-hidden">
+<img alt="Steam &amp; Steel" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBM8qfcXplPYoOf1yOkw6YLGBeiZpWTjAbBCayONDMLy7zRcWeVCmvuLhDB8k8BEb5XNXf5K4w7nJUg0e11mRrQAvWsYNjsBEZnITcNoUlYP_3MuwzN30Qs1-ZD91qvX-BsYp4jBOQaBym7sqRBHgv_2SA4FK2LlZ7S5teFCc872aNXal7Eahoz8qv19Joxb-YlLR7GU8Z_qvotHY7PBhcAK_0lb2jmQhZvLHLYjvAApgg9UGCnGVDwxZv5DqBigTFWJNWGoRkquNw"/>
+<div class="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-semibold px-2 py-1 rounded flex items-center gap-1">
+<span class="material-icons text-[12px]">history_edu</span> Historia
+                        </div>
+</div>
+<div class="p-5 flex flex-col flex-1">
+<h4 class="text-lg font-bold mb-2">Vapor y Acero</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 mb-6">
+                            Estrategia industrial para comprender procesos de producción y optimización.
+                        </p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-xs font-semibold text-primary">3-6 Jugadores</span>
+<a class="inline-flex items-center justify-center px-4 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-bold rounded-lg transition-colors" href="#">
+                                Ver Juego
+                            </a>
+</div>
+</div>
+</div>
+<div class="game-card flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+<div class="relative h-48 overflow-hidden">
+<img alt="Void Tactics" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuABU4v16BMOZ4lw1SRKgwNZRsFNKUW4cshNveWnk9AWcROCD-hOwfntXuc_VfNKQUh80m9QKh1zzKxU8_GEm7EZwlczxFIDX7FUK4DYRhmadxPiA7-oT1H-cXsZjGm9UqHOF65ZX1XQLOyoWkswnoh38PZTJf8XMYyD7Z13oBvMHEcM8K3KziBXZHkoCbTY6BJ6l0puiUuPGDIFNvl7DqzR4jCDvEn937todRYtgXO-yQ6Xac1NWV983eKGXrpdhyeeXLbJI6kULxA"/>
+<div class="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-semibold px-2 py-1 rounded flex items-center gap-1">
+<span class="material-icons text-[12px]">functions</span> Matemáticas
+                        </div>
+</div>
+<div class="p-5 flex flex-col flex-1">
+<h4 class="text-lg font-bold mb-2">Tácticas del Vacío</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 mb-6">
+                            Combate táctico minimalista centrado en el pensamiento lógico y la geometría.
+                        </p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-xs font-semibold text-primary">2 Jugadores</span>
+<a class="inline-flex items-center justify-center px-4 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-bold rounded-lg transition-colors" href="#">
+                                Ver Juego
+                            </a>
+</div>
+</div>
+</div>
+<div class="game-card flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+<div class="relative h-48 overflow-hidden">
+<img alt="Dungeon Crawl" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAtiHIQdIQuL2TyyuiCNPJjDZSNlubqi4VUMGxbQISfAkwWj3acGmpqt8Jbqo7RTy8KQIwtZGSERdKeh7JwRPF54hrfoCMZGSTlgUht5tbpqtp06_WX3DC5lQu6bh41esLy0GLb_44oBvILqZ_IO-Mg9IH6GPExELOmelbD-qqe3-71EOr_oEAAzc-r2nAySsn2sVqk1lgjZl5Xj4ozD9q6915vLKBiwl6eybUJXwOoS8vS78BFk8xkPLEeoAII7ke-eLqhYj77Ayg"/>
+<div class="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-semibold px-2 py-1 rounded flex items-center gap-1">
+<span class="material-icons text-[12px]">translate</span> Lengua
+                        </div>
+</div>
+<div class="p-5 flex flex-col flex-1">
+<h4 class="text-lg font-bold mb-2">Mazmorras de Papel</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 mb-6">
+                            Un juego de tirar y escribir que fomenta la narrativa creativa y el mapeo.
+                        </p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-xs font-semibold text-primary">1-4 Jugadores</span>
+<a class="inline-flex items-center justify-center px-4 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-bold rounded-lg transition-colors" href="#">
+                                Ver Juego
+                            </a>
+</div>
+</div>
+</div>
+<div class="game-card flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+<div class="relative h-48 overflow-hidden">
+<img alt="Alchemist's Brew" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA6bB4PCDHgCjC4JbigNkVCch73aUf46uKtQyvft2EKFSnb0zfajNiv_hgeLeG90IVs5Wfj2NUd6q3l2pP21B833SCDgTl6WMV3654U1G_NwA3-5Bv25AEnM2sevGyq2e9h9MxOsu1dG-zeDHQTTlpc4U6UFvkS2jQAC88QhA5-ZsMAfpYNn8BKvfAa3-UH9wJjOKFotbSlrJ887f0yPuCr0UcwXnknINBIYOHZ6OdgkQ0ZEGzkYdPLarblU7A2f7mGq8TimrgOENo"/>
+<div class="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-semibold px-2 py-1 rounded flex items-center gap-1">
+<span class="material-icons text-[12px]">science</span> Ciencias
+                        </div>
+</div>
+<div class="p-5 flex flex-col flex-1">
+<h4 class="text-lg font-bold mb-2">El Brebaje del Alquimista</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 mb-6">
+                            Recolección de ingredientes para trabajar conceptos de combinatoria y probabilidad.
+                        </p>
+<div class="mt-auto flex items-center justify-between">
+<span class="text-xs font-semibold text-primary">2-5 Jugadores</span>
+<a class="inline-flex items-center justify-center px-4 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-bold rounded-lg transition-colors" href="#">
+                                Ver Juego
+                            </a>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-12 flex items-center justify-center space-x-2">
+<button class="w-10 h-10 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-primary/10 transition-colors">
+<span class="material-icons text-sm">chevron_left</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-lg bg-primary text-white font-bold">1</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-primary/10 transition-colors">2</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-primary/10 transition-colors">
+<span class="material-icons text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<div class="py-12"></div>
+
+</body></html>
