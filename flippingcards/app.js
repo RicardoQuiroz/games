@@ -15,7 +15,7 @@
    * URL del Google Apps Script desplegado como Web App
    * Reemplaza esta URL con la de tu propio script
    */
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwCj5-idGCk2O4AxdFr9BA_qTq45K8DkTV8_Qzn7DQ-mCTGWnhNSLSlgn2IyQYOD3yLNA/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwUWTYfih4hIYt5I2DmbYVcJIBf3VaLr5EzJbAiyDjEnnVaKZknxwFWB1XuG4TnqolfLw/exec';
 
   /**
    * ID del juego a cargar. Se puede pasar por URL: ?gameId=game1
@@ -1043,3 +1043,4 @@
   init();
 
 })();
+
