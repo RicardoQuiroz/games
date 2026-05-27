@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>PONG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#000;
+  display:flex; justify-content:center; align-items:center;
+  height:100vh; overflow:hidden;
+  font-family:'Orbitron',sans-serif;
+}
+canvas { display:block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+// ══════════════════════════════════════════════════════════
+//  ① CONFIGURACIÓN  ← pega aquí la URL de tu Apps Script
+// ══════════════════════════════════════════════════════════
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwfp0BbcL8kEjh46ChacUQsmjaSJBhC5yi3XSC7ZyqTWCMvxEnHG6EuMY0YxLPThhLl/exec';
+
+// ══════════════════════════════════════════════════════════
+//  ② RESOLUCIÓN LÓGICA DEL JUEGO
+// ══════════════════════════════════════════════════════════
+const LW = 800, LH = 600;
+
+// ══════════════════════════════════════════════════════════
+//  ③ ESTADOS
+// ══════════════════════════════════════════════════════════
+const S = {
+  LOADING:'loading', TITLE:'title', MODE:'mode',
+  PLAYER_ID:'playerid', Q_OPT:'qopt',
+  SORTING_Q:'sortingq', SORTING_RESULT:'sortingresult',
+  PLAYING:'playing', QUESTION:'question', Q_RESULT:'qresult',
+  POINT:'point', GAME_OVER:'gameover', LEADERBOARD:'leaderboard',
+};
+
+// ══════════════════════════════════════════════════════════
+//  ④ CANVAS — escala al 100% de la ventana
+// ══════════════════════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+
+function resize() {
+  const sc = Math.min(window.innerWidth/LW, window.innerHeight/LH);
+  canvas.width  = LW; canvas.height = LH;
+  canvas.style.width  = (LW*sc)+'px';
+  canvas.style.height = (LH*sc)+'px';
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ══════════════════════════════════════════════════════════
+//  ⑤ TEMAS  (noche / día)
+// ══════════════════════════════════════════════════════════
+const THEMES = {
+  night: { bg:'#0a0a1a', paddle:'#00e5ff', ball:'#ffeb3b', net:'#1a1a4a',
+           text:'#e0e0ff', accent:'#ff4081', score:'#00e5ff',
+           hud:'#7986cb', overlay:'rgba(10,10,26,0.88)' },
+  day:   { bg:'#f5f0e0', paddle:'#1565c0', ball:'#e53935', net:'#bcaaa4',
+           text:'#212121', accent:'#e65100', score:'#1565c0',
+           hud:'#546e7a', overlay:'rgba(245,240,224,0.90)' },
+};
+
+// ══════════════════════════════════════════════════════════
+//  ⑥ ESTADO GLOBAL
+// ══════════════════════════════════════════════════════════
+const gs = {
+  state: S.LOADING,
+  theme: 'night', T: THEMES.night,
+
+  // ── cargado desde Sheets (o valores por defecto) ─────
+  cfg: { titleMain:'PONG', titleSub:'El juego del saber', ballsCount:5 },
+  questions: [],   // banco de preguntas
+  scores:    [],   // tabla de récords
+
+  // ── partida ──────────────────────────────────────────
+  mode:    null,   // '1p' | '2p'
+  withQ:   true,
+  players: [
+    { id:'', score:0, errors:0 },
+    { id:'', score:0, errors:0 },
+  ],
+  server: 0,       // 0=izquierda, 1=derecha
+
+  // ── física ───────────────────────────────────────────
+  pads: [
+    { x:20,       y:LH/2-40, w:14, h:80, dy:0 },
+    { x:LW-34,    y:LH/2-40, w:14, h:80, dy:0 },
+  ],
+  ball: { x:LW/2, y:LH/2, sz:12, vx:0, vy:0, spd:5 },
+  ballsPlayed: 0,
+  rallies:     0,
+  lastHit:     0,
+
+  // ── preguntas ────────────────────────────────────────
+  currentQ:   null,
+  qPhase:     null,  // 'sorting' | 'random' | 'pre_serve'
+  qAsker:     0,
+  qFirstWrong:false,
+  qResult:    null,  // { correct, winner }
+  usedQIds:   [],
+
+  // ── UI ───────────────────────────────────────────────
+  frame:     0,
+  stFrame:   0,     // frame en que empezó el estado
+  nextRandQ: 0,     // frame en que dispara la siguiente pregunta aleatoria
+  menuSel:   0,
+  idInputs:  ['',''],
+  idCursor:  0,
+  keys:      {},
+  qImages:   {},    // caché de imágenes cargadas
+};
+
+// ── helpers de tiempo ──────────────────────────────────
+const elapsed = () => gs.frame - gs.stFrame;
+function setState(s) { gs.state=s; gs.stFrame=gs.frame; gs.menuSel=0; }
+
+// ══════════════════════════════════════════════════════════
+//  ⑦ AUDIO (Web Audio API — sin archivos externos)
+// ══════════════════════════════════════════════════════════
+let ac = null;
+function ensureAudio() {
+  if (!ac) ac = new (window.AudioContext||window.webkitAudioContext)();
+}
+function beep(freq, dur, type='square', vol=0.35) {
+  if (!ac) return;
+  const o=ac.createOscillator(), g=ac.createGain();
+  o.connect(g); g.connect(ac.destination);
+  o.type=type; o.frequency.value=freq;
+  g.gain.setValueAtTime(vol, ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+dur);
+  o.start(); o.stop(ac.currentTime+dur);
+}
+const SFX = {
+  paddle:  ()=>beep(440,0.05,'square',0.4),
+  wall:    ()=>beep(300,0.04,'square',0.3),
+  point:   ()=>{ beep(220,0.1); setTimeout(()=>beep(160,0.18),110); },
+  correct: ()=>{ beep(660,0.08); setTimeout(()=>beep(880,0.12),90); },
+  wrong:   ()=>beep(140,0.22,'sawtooth',0.4),
+  start:   ()=>{ [523,659,784].forEach((f,i)=>setTimeout(()=>beep(f,0.12),i*110)); },
+  gameover:()=>{ [440,330,220,110].forEach((f,i)=>setTimeout(()=>beep(f,0.22,'sawtooth'),i*160)); },
+};
+
+// ══════════════════════════════════════════════════════════
+//  ⑧ DIBUJO — utilidades
+// ══════════════════════════════════════════════════════════
+function clear()       { ctx.fillStyle=gs.T.bg; ctx.fillRect(0,0,LW,LH); }
+function overlay()     { ctx.fillStyle=gs.T.overlay; ctx.fillRect(0,0,LW,LH); }
+function fillRect(x,y,w,h,c) { ctx.fillStyle=c; ctx.fillRect(~~x,~~y,w,h); }
+
+function txt(str, x, y, size=18, color=null, align='left') {
+  ctx.font       = `${size}px 'Orbitron',sans-serif`;
+  ctx.fillStyle  = color||gs.T.text;
+  ctx.textAlign  = align;
+  ctx.fillText(str, x, y);
+}
+
+function wrapTxt(str, cx, y, maxW, size, color) {
+  ctx.font=`${size}px 'Orbitron',sans-serif`;
+  ctx.fillStyle=color||gs.T.text; ctx.textAlign='center';
+  const words=str.split(' '); let line='', ly=y;
+  for(const w of words){
+    const t=line+(line?' ':'')+w;
+    if(ctx.measureText(t).width>maxW && line){ ctx.fillText(line,cx,ly); line=w; ly+=size+5; }
+    else line=t;
+  }
+  if(line) ctx.fillText(line,cx,ly);
+  return ly+size+5;
+}
+
+function drawNet() {
+  const seg=20, gap=10;
+  ctx.fillStyle=gs.T.net;
+  for(let y=0; y<LH; y+=seg+gap) ctx.fillRect(LW/2-2, y, 4, seg);
+}
+
+function drawHUD() {
+  const p=gs.players;
+  txt(p[0].score, LW/4, 56, 42, gs.T.score, 'center');
+  txt(p[1].score, 3*LW/4, 56, 42, gs.T.score, 'center');
+  // IDs truncados a 8 chars para que quepan con Orbitron
+  const n0 = (gs.mode==='2p' ? (p[0].id||'J1') : 'TU').slice(0,8);
+  const n1 = (gs.mode==='2p' ? (p[1].id||'J2') : 'CPU').slice(0,8);
+  txt(n0, LW/4, 74, 11, gs.T.hud, 'center');
+  txt(n1, 3*LW/4, 74, 11, gs.T.hud, 'center');
+  const left=gs.cfg.ballsCount-gs.ballsPlayed;
+  txt(`BOLAS: ${left}`, LW/2, 16, 10, gs.T.hud, 'center');
+  txt('▼', gs.server===0?LW/4:3*LW/4, 88, 10, gs.T.accent, 'center');
+}
+
+// ══════════════════════════════════════════════════════════
+//  ⑨ BANCO DE PREGUNTAS DE DEMOSTRACIÓN
+// ══════════════════════════════════════════════════════════
+const DEMO_Q = [
+  { id:1, question:'¿Cuál es el planeta más grande del sistema solar?',
+    type:'multiple', a:'Saturno', b:'Júpiter', c:'Neptuno', d:'Urano', correct:'b', imageUrl:'' },
+  { id:2, question:'La Gran Muralla China es visible a simple vista desde el espacio.',
+    type:'truefalse', a:'Verdadero', b:'Falso', c:'', d:'', correct:'b', imageUrl:'' },
+  { id:3, question:'¿En qué año llegó el ser humano a la Luna por primera vez?',
+    type:'multiple', a:'1965', b:'1972', c:'1969', d:'1971', correct:'c', imageUrl:'' },
+  { id:4, question:'¿Cuántos huesos tiene el cuerpo humano adulto?',
+    type:'multiple', a:'198', b:'206', c:'215', d:'224', correct:'b', imageUrl:'' },
+  { id:5, question:'El agua hierve a 100 °C a nivel del mar.',
+    type:'truefalse', a:'Verdadero', b:'Falso', c:'', d:'', correct:'a', imageUrl:'' },
+  { id:6, question:'¿Cuál es el océano más grande del mundo?',
+    type:'multiple', a:'Atlántico', b:'Índico', c:'Ártico', d:'Pacífico', correct:'d', imageUrl:'' },
+  { id:7, question:'William Shakespeare nació en Francia.',
+    type:'truefalse', a:'Verdadero', b:'Falso', c:'', d:'', correct:'b', imageUrl:'' },
+  { id:8, question:'¿Cuántos lados tiene un octágono?',
+    type:'multiple', a:'6', b:'7', c:'8', d:'9', correct:'c', imageUrl:'' },
+  { id:9, question:'¿Cuál es el elemento más abundante en la corteza terrestre?',
+    type:'multiple', a:'Hierro', b:'Silicio', c:'Oxígeno', d:'Aluminio', correct:'c', imageUrl:'' },
+  { id:10, question:'El corazón humano tiene cuatro cavidades.',
+    type:'truefalse', a:'Verdadero', b:'Falso', c:'', d:'', correct:'a', imageUrl:'' },
+];
+
+function shuffle(array) {
+  let currentIndex = array.length, randomIndex;
+  while (currentIndex !== 0) {
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+    [array[currentIndex], array[randomIndex]] = [
+      array[randomIndex], array[currentIndex]];
+  }
+  return array;
+}
+
+function pickQ() {
+  const pool = gs.questions.filter(q => !gs.usedQIds.includes(String(q.id)));
+  if (!pool.length) {
+    gs.usedQIds = [];
+    if (!gs.questions.length) return null;
+    const randQ = gs.questions[~~(Math.random() * gs.questions.length)];
+    gs.usedQIds.push(String(randQ.id));
+    return randQ;
+  }
+  const q = pool[~~(Math.random() * pool.length)];
+  gs.usedQIds.push(String(q.id));
+  return q;
+}
+
+function getQOptions(q) {
+  return q.type==='truefalse'
+    ? [{k:'A',v:q.a},{k:'B',v:q.b}]
+    : [{k:'A',v:q.a},{k:'B',v:q.b},{k:'C',v:q.c},{k:'D',v:q.d}].filter(o=>o.v);
+}
+
+// ══════════════════════════════════════════════════════════
+//  ⑩ FÍSICA
+// ══════════════════════════════════════════════════════════
+function resetBall(server) {
+  const b=gs.ball;
+  b.x=LW/2; b.y=LH/2;
+  b.spd = Math.min(5+gs.ballsPlayed*0.6, 14);
+  const ang=(Math.random()*0.7-0.35);
+  const dir=server===0?1:-1;
+  b.vx=dir*b.spd*Math.cos(ang);
+  b.vy=b.spd*Math.sin(ang);
+  gs.rallies=0;
+}
+
+function updateBall() {
+  const b=gs.ball, p=gs.pads;
+  b.x+=b.vx; b.y+=b.vy;
+
+  // Paredes superior / inferior
+  if(b.y-b.sz/2<=0)  { b.y=b.sz/2;    b.vy=Math.abs(b.vy);  SFX.wall(); }
+  if(b.y+b.sz/2>=LH) { b.y=LH-b.sz/2; b.vy=-Math.abs(b.vy); SFX.wall(); }
+
+  // Paleta izquierda
+  if(b.vx<0 && b.x-b.sz/2<=p[0].x+p[0].w && b.x-b.sz/2>=p[0].x &&
+     b.y>=p[0].y-b.sz/2 && b.y<=p[0].y+p[0].h+b.sz/2) {
+    b.x=p[0].x+p[0].w+b.sz/2;
+    const rel=(b.y-(p[0].y+p[0].h/2))/(p[0].h/2);
+    gs.rallies++; gs.lastHit=0;
+    b.spd=Math.min(b.spd+0.3,18);
+    b.vx= b.spd*Math.cos(rel*0.8);
+    b.vy= b.spd*Math.sin(rel*0.8);
+    SFX.paddle();
+  }
+  // Paleta derecha
+  if(b.vx>0 && b.x+b.sz/2>=p[1].x && b.x+b.sz/2<=p[1].x+p[1].w &&
+     b.y>=p[1].y-b.sz/2 && b.y<=p[1].y+p[1].h+b.sz/2) {
+    b.x=p[1].x-b.sz/2;
+    const rel=(b.y-(p[1].y+p[1].h/2))/(p[1].h/2);
+    gs.rallies++; gs.lastHit=1;
+    b.spd=Math.min(b.spd+0.3,18);
+    b.vx=-(b.spd*Math.cos(rel*0.8));
+    b.vy= b.spd*Math.sin(rel*0.8);
+    SFX.paddle();
+  }
+
+  // Fuera de campo
+  if(b.x < 0)  { awardPoint(1); return; }
+  if(b.x > LW) { awardPoint(0); return; }
+}
+
+function updatePaddles() {
+  const p=gs.pads, sp=6+gs.ballsPlayed*0.15;
+
+  // J1 (izquierda)
+  if(gs.mode==='1p') {
+    p[0].dy = gs.keys['ArrowUp']?-sp : gs.keys['ArrowDown']?sp : 0;
+  } else {
+    p[0].dy = (gs.keys['w']||gs.keys['W'])?-sp : (gs.keys['s']||gs.keys['S'])?sp : 0;
+    p[1].dy = gs.keys['ArrowUp']?-sp : gs.keys['ArrowDown']?sp : 0;
+  }
+
+  // CPU (derecha en modo 1P)
+  if(gs.mode==='1p') {
+    const ctr=p[1].y+p[1].h/2;
+    const diff=gs.ball.y-ctr;
+    const cspd=Math.min(sp*(0.55+gs.ballsPlayed*0.07), sp*0.92);
+    p[1].dy = Math.abs(diff)>4 ? Math.sign(diff)*cspd : 0;
+  }
+
+  for(const pad of gs.pads) {
+    pad.y=Math.max(0, Math.min(LH-pad.h, pad.y+pad.dy));
+  }
+}
+
+function awardPoint(winner) {
+  gs.players[winner].score++;
+  gs.players[1-winner].errors++;
+  gs.ballsPlayed++;
+  gs.server=winner;
+  SFX.point();
+  setState(S.POINT);
+}
+
+// ══════════════════════════════════════════════════════════
+//  ⑪ PANTALLAS — RENDER
+// ══════════════════════════════════════════════════════════
+
+// — Cargando —
+function renderLoading() {
+  clear();
+  const dots='.'.repeat(~~(gs.frame/20)%4);
+  txt('CARGANDO'+dots, LW/2, LH/2, 26, gs.T.accent, 'center');
+  txt('Conectando con Google Sheets...', LW/2, LH/2+38, 14, gs.T.hud, 'center');
+}
+
+// — Título —
+function renderTitle() {
+  clear(); drawNet();
+  const p=0.85+0.15*Math.sin(gs.frame*0.05);
+  ctx.globalAlpha=p;
+  txt(gs.cfg.titleMain, LW/2, LH/2-50, 88, gs.T.accent, 'center');
+  ctx.globalAlpha=1;
+  txt(gs.cfg.titleSub,  LW/2, LH/2+14, 22, gs.T.text,   'center');
+  txt('— PRESIONA ENTER —', LW/2, LH/2+72, 16, gs.T.hud,  'center');
+  txt('[D] Modo día/noche', LW/2, LH-18,  12, gs.T.hud,  'center');
+}
+
+// — Modo de juego —
+function renderMode() {
+  clear(); drawNet(); overlay();
+  txt('MODO DE JUEGO', LW/2, 140, 30, gs.T.accent, 'center');
+  const ops=['1 JUGADOR   (tú vs CPU)','2 JUGADORES  (mismo teclado)'];
+  ops.forEach((o,i)=>{
+    const sel=gs.menuSel===i;
+    txt((sel?'▶ ':'  ')+o, LW/2, 250+i*64, 22, sel?gs.T.accent:gs.T.text, 'center');
+  });
+  txt('↑↓ Seleccionar  ·  ENTER Confirmar', LW/2, LH-28, 13, gs.T.hud, 'center');
+}
+
+// — Ingreso de ID —
+function renderPlayerID() {
+  clear(); drawNet(); overlay();
+  const cur=gs.idCursor;
+  txt(`JUGADOR ${cur+1}`, LW/2, 155, 30, gs.T.accent, 'center');
+  txt('Ingresa tu ID de jugador (mínimo 6 dígitos):', LW/2, 210, 15, gs.T.text, 'center');
+  const inp=gs.idInputs[cur];
+  const blink=~~(elapsed()/15)%2===0?'█':' ';
+  ctx.strokeStyle=gs.T.accent; ctx.lineWidth=2;
+  ctx.strokeRect(LW/2-130,238,260,48);
+  txt(inp+blink, LW/2, 271, 30, gs.T.score, 'center');
+  if(inp.length>=6)
+    txt('✓  ENTER para confirmar', LW/2, 310, 14, gs.T.accent, 'center');
+  else
+    txt(`${6-inp.length} dígito${6-inp.length!==1?'s':''} más`, LW/2, 310, 13, gs.T.hud, 'center');
+}
+
+// — Opción de preguntas —
+function renderQOpt() {
+  clear(); drawNet(); overlay();
+  txt('¿JUGAR CON PREGUNTAS?', LW/2, 155, 26, gs.T.accent, 'center');
+  txt(`${gs.questions.length} preguntas cargadas`, LW/2, 190, 14, gs.T.hud, 'center');
+  const ops=['CON PREGUNTAS  (modo aprendizaje)','SIN PREGUNTAS  (pong clásico)'];
+  ops.forEach((o,i)=>{
+    const sel=gs.menuSel===i;
+    txt((sel?'▶ ':'  ')+o, LW/2, 270+i*60, 20, sel?gs.T.accent:gs.T.text, 'center');
+  });
+  txt('↑↓ Seleccionar  ·  ENTER Confirmar', LW/2, LH-28, 13, gs.T.hud, 'center');
+}
+
+// — Pregunta (sorteo, aleatoria, pre-saque) —
+function renderQuestion() {
+  const q=gs.currentQ; if(!q) return;
+  clear(); drawNet();
+  drawPaddle(0); drawPaddle(1);
+  overlay();
+
+  // Encabezado
+  const phaseLabel = gs.qPhase==='sorting'   ? 'SORTEO DE SAQUE'  :
+                     gs.qPhase==='pre_serve'  ? 'ANTES DE SACAR…'  : '⏸ PREGUNTA';
+  txt(phaseLabel, LW/2, 34, 16, gs.T.accent, 'center');
+
+  // Quién responde
+  const askerName = gs.mode==='2p'
+    ? (gs.players[gs.qAsker].id||`J${gs.qAsker+1}`)
+    : (gs.qAsker===0?'TÚ':'CPU');
+  const label = gs.qFirstWrong ? `TURNO → ${askerName}` : `RESPONDE: ${askerName}`;
+  txt(label, LW/2, 58, 14, gs.T.hud, 'center');
+
+  // Imagen (si hay)
+  let yc=90;
+  if(q.imageUrl) {
+    if(!gs.qImages[q.id]) {
+      const im=new Image(); im.src=q.imageUrl;
+      gs.qImages[q.id]=im;
+    }
+    const im=gs.qImages[q.id];
+    if(im.complete && im.naturalWidth>0) {
+      const ih=110, iw=ih*(im.naturalWidth/im.naturalHeight||1.5);
+      ctx.drawImage(im, LW/2-iw/2, yc, iw, ih);
+      yc+=ih+10;
+    }
+  }
+
+  // Texto de la pregunta
+  yc = wrapTxt(q.question, LW/2, yc, LW-80, 19, gs.T.text) + 8;
+
+  // Opciones
+  const opts=getQOptions(q);
+  opts.forEach((o,i)=>{
+    const sel=gs.menuSel===i;
+    if(sel) { ctx.fillStyle=gs.T.accent+'28'; ctx.fillRect(50,yc+i*46-6,LW-100,38); }
+    txt(`${sel?'▶':' '} [${o.k}]  ${o.v}`, 70, yc+i*46+20, 18, sel?gs.T.accent:gs.T.text, 'left');
+  });
+
+  txt('↑↓ Seleccionar  ·  ENTER Confirmar', LW/2, LH-18, 12, gs.T.hud, 'center');
+}
+
+// — Resultado de pregunta —
+function renderQResult() {
+  clear(); drawNet(); drawPaddle(0); drawPaddle(1); overlay();
+  const r=gs.qResult;
+  const ok=r&&r.correct;
+  txt(ok?'✓  CORRECTO':'✗  INCORRECTO', LW/2, LH/2-50, 36, ok?'#4caf50':'#f44336', 'center');
+  if(r&&r.winner!==null) {
+    const wn=gs.mode==='2p'
+      ? (gs.players[r.winner].id||`J${r.winner+1}`)
+      : (r.winner===0?'TÚ':'CPU');
+    txt(`Saca: ${wn}`, LW/2, LH/2+10, 22, gs.T.accent, 'center');
+  }
+  txt('Continuando en un momento…', LW/2, LH/2+60, 15, gs.T.hud, 'center');
+}
+
+// — Juego —
+function renderPlaying() {
+  clear(); drawNet(); drawHUD();
+  drawPaddle(0); drawPaddle(1);
+  fillRect(gs.ball.x-gs.ball.sz/2, gs.ball.y-gs.ball.sz/2, gs.ball.sz, gs.ball.sz, gs.T.ball);
+}
+
+function drawPaddle(i) {
+  const p=gs.pads[i]; fillRect(p.x,p.y,p.w,p.h,gs.T.paddle);
+}
+
+// — Punto —
+function renderPoint() {
+  clear(); drawNet(); drawHUD(); drawPaddle(0); drawPaddle(1); overlay();
+  txt('PUNTO', LW/2, LH/2-18, 44, gs.T.accent, 'center');
+  const left=gs.cfg.ballsCount-gs.ballsPlayed;
+  if(left<=0)
+    txt('¡Se acabaron las bolas!', LW/2, LH/2+30, 19, gs.T.text, 'center');
+  else
+    txt(`Bolas restantes: ${left}`, LW/2, LH/2+30, 18, gs.T.text, 'center');
+  if(elapsed()>60)
+    txt('ENTER → continuar', LW/2, LH/2+72, 14, gs.T.hud, 'center');
+}
+
+// — Game Over —
+function renderGameOver() {
+  clear(); drawNet(); overlay();
+  txt('FIN DEL JUEGO', LW/2, 78, 38, gs.T.accent, 'center');
+  const p=gs.players;
+  const winner=p[0].score>p[1].score?0:p[1].score>p[0].score?1:-1;
+  [0,1].forEach(i=>{
+    const x=i===0?LW/4:3*LW/4;
+    const n=gs.mode==='2p'?(p[i].id||`J${i+1}`):(i===0?'TÚ':'CPU');
+    txt(n, x, 158, 18, gs.T.hud, 'center');
+    txt(p[i].score, x, 218, 62, gs.T.score, 'center');
+    txt(`Errores: ${p[i].errors}`, x, 252, 14, gs.T.hud, 'center');
+    if(winner===i) txt('★  GANADOR', x, 285, 17, gs.T.accent, 'center');
+  });
+  if(winner===-1) txt('EMPATE', LW/2, 285, 24, gs.T.accent, 'center');
+  txt('ENTER → Tabla de récords   ·   ESC → Inicio', LW/2, LH-28, 13, gs.T.hud, 'center');
+}
+
+// — Tabla de récords —
+function renderLeaderboard() {
+  clear(); drawNet(); overlay();
+  txt('RÉCORDS', LW/2, 54, 28, gs.T.accent, 'center');
+  if(!gs.scores.length) {
+    txt('Sin récords aún', LW/2, LH/2, 16, gs.T.hud, 'center');
+  } else {
+    // Orbitron es ancha: reducir tamaños y ajustar columnas
+    const cx=[46,160,320,450,590];
+    ['#','ID','PTS','MODO','FECHA'].forEach((h,i)=>txt(h,cx[i],102,11,gs.T.hud,'left'));
+    ctx.strokeStyle=gs.T.net; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(36,110); ctx.lineTo(LW-36,110); ctx.stroke();
+    gs.scores.slice(0,12).forEach((s,i)=>{
+      const y=130+i*34;
+      const isMe=gs.players.some(pl=>pl.id&&pl.id===String(s.playerID));
+      const col=isMe?gs.T.accent:gs.T.text;
+      txt(`${i+1}`,                          cx[0],y,12,col,'left');
+      txt(String(s.playerID||'').slice(-8),  cx[1],y,12,col,'left');
+      txt(String(s.score||0),                cx[2],y,12,col,'left');
+      txt(String(s.mode||''),                cx[3],y,11,col,'left');
+      txt(String(s.date||'').slice(0,10),    cx[4],y,11,col,'left');
+    });
+  }
+  txt('ESC  →  INICIO', LW/2, LH-18, 11, gs.T.hud, 'center');
+}
+
+// ══════════════════════════════════════════════════════════
+//  ⑫ FLUJO DEL JUEGO
+// ══════════════════════════════════════════════════════════
+function startRound() {
+  gs.pads[0].y=LH/2-40; gs.pads[1].y=LH/2-40;
+  SFX.start();
+  launchBall();
+}
+
+function launchBall() {
+  resetBall(gs.server);
+  scheduleRandomQ();
+  setState(S.PLAYING);
+}
+
+function scheduleRandomQ() {
+  // dispara entre 18 y 38 segundos (1080–2280 frames a 60fps)
+  gs.nextRandQ = gs.frame + 1080 + ~~(Math.random()*1200);
+}
+
+function handleAnswerResult(correct, stateAfter) {
+  // En 1P: el jugador siempre responde; correcto=saca él, incorrecto=saca CPU
+  // En 2P: lógica de turno cedido
+  if(gs.mode==='1p') {
+    const winner=correct?0:1;
+    gs.server=winner;
+    gs.qResult={ correct, winner };
+    SFX[correct?'correct':'wrong']();
+    setState(stateAfter);
+    return;
+  }
+  // 2P
+  if(!gs.qFirstWrong) {
+    if(correct) {
+      gs.server=gs.qAsker;
+      gs.qResult={ correct:true, winner:gs.qAsker };
+      SFX.correct();
+      setState(stateAfter);
+    } else {
+      SFX.wrong();
+      gs.qFirstWrong=true;
+      gs.qAsker=1-gs.qAsker;
+      gs.menuSel=0;
+      // se queda en el estado de pregunta, ahora responde el otro
+    }
+  } else {
+    // segundo turno
+    if(correct) {
+      gs.server=gs.qAsker;
+      gs.qResult={ correct:true, winner:gs.qAsker };
+      SFX.correct();
+    } else {
+      gs.server=Math.random()<0.5?0:1;
+      gs.qResult={ correct:false, winner:gs.server };
+      SFX.wrong();
+    }
+    setState(stateAfter);
+  }
+}
+
+function resumeFromQResult() {
+  if(gs.qPhase==='pre_serve' || gs.qPhase==='sorting') {
+    startRound();
+  } else {
+    // pregunta aleatoria: reanudar partido
+    scheduleRandomQ();
+    setState(S.PLAYING);
+  }
+}
+
+function initGame() {
+  gs.players=[{id:'',score:0,errors:0},{id:'',score:0,errors:0}];
+  gs.ballsPlayed=0; gs.server=0; gs.usedQIds=[];
+  gs.pads[0].y=LH/2-40; gs.pads[1].y=LH/2-40;
+}
+
+// ══════════════════════════════════════════════════════════
+//  ⑬ INPUT
+// ══════════════════════════════════════════════════════════
+document.addEventListener('keydown', e=>{
+  gs.keys[e.key]=true;
+  ensureAudio();
+  onKey(e.key);
+  // Prevenir scroll con flechas
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+});
+document.addEventListener('keyup', e=>{ gs.keys[e.key]=false; });
+
+function onKey(key) {
+  // Toggle tema
+  if(key==='d'||key==='D') {
+    gs.theme=gs.theme==='night'?'day':'night';
+    gs.T=THEMES[gs.theme]; return;
+  }
+
+  const st=gs.state;
+
+  // ESC global
+  if(key==='Escape') {
+    if(st===S.GAME_OVER||st===S.LEADERBOARD){ initGame(); setState(S.TITLE); }
+    return;
+  }
+
+  if(st===S.TITLE) {
+    if(key==='Enter') setState(S.MODE);
+    return;
+  }
+
+  if(st===S.MODE) {
+    if(key==='ArrowUp')   gs.menuSel=Math.max(0,gs.menuSel-1);
+    if(key==='ArrowDown') gs.menuSel=Math.min(1,gs.menuSel+1);
+    if(key==='Enter') {
+      gs.mode=gs.menuSel===0?'1p':'2p';
+      gs.idInputs=['','']; gs.idCursor=0;
+      setState(S.PLAYER_ID);
+    }
+    return;
+  }
+
+  if(st===S.PLAYER_ID) {
+    const max=gs.mode==='2p'?1:0;
+    if(key==='Backspace') gs.idInputs[gs.idCursor]=gs.idInputs[gs.idCursor].slice(0,-1);
+    else if(/^\d$/.test(key)&&gs.idInputs[gs.idCursor].length<12)
+      gs.idInputs[gs.idCursor]+=key;
+    else if(key==='Enter'&&gs.idInputs[gs.idCursor].length>=6) {
+      gs.players[gs.idCursor].id=gs.idInputs[gs.idCursor];
+      if(gs.idCursor<max) gs.idCursor++;
+      else setState(S.Q_OPT);
+    }
+    return;
+  }
+
+  if(st===S.Q_OPT) {
+    if(key==='ArrowUp')   gs.menuSel=Math.max(0,gs.menuSel-1);
+    if(key==='ArrowDown') gs.menuSel=Math.min(1,gs.menuSel+1);
+    if(key==='Enter') {
+      gs.withQ=gs.menuSel===0&&gs.questions.length>0;
+      // Fijar IDs y resetear marcadores SIEMPRE, en ambas ramas
+      initGame();
+      gs.players[0].id = gs.idInputs[0];
+      gs.players[1].id = gs.mode==='2p' ? gs.idInputs[1] : 'CPU';
+      if(gs.withQ) {
+        gs.currentQ=pickQ(); gs.qPhase='sorting';
+        gs.qAsker=0; gs.qFirstWrong=false;
+        setState(S.SORTING_Q);
+      } else {
+        gs.server=Math.random()<0.5?0:1;
+        startRound();
+      }
+    }
+    return;
+  }
+
+  if(st===S.SORTING_Q) {
+    const opts=getQOptions(gs.currentQ);
+    if(key==='ArrowUp')   gs.menuSel=Math.max(0,gs.menuSel-1);
+    if(key==='ArrowDown') gs.menuSel=Math.min(opts.length-1,gs.menuSel+1);
+    if(key==='Enter') {
+      const chosen=['a','b','c','d'][gs.menuSel];
+      handleAnswerResult(chosen===gs.currentQ.correct, S.SORTING_RESULT);
+    }
+    return;
+  }
+
+  // SORTING_RESULT y Q_RESULT: auto-avanzan, no necesitan ENTER
+
+  if(st===S.QUESTION) {
+    const opts=getQOptions(gs.currentQ);
+    if(key==='ArrowUp')   gs.menuSel=Math.max(0,gs.menuSel-1);
+    if(key==='ArrowDown') gs.menuSel=Math.min(opts.length-1,gs.menuSel+1);
+    if(key==='Enter') {
+      const chosen=['a','b','c','d'][gs.menuSel];
+      handleAnswerResult(chosen===gs.currentQ.correct, S.Q_RESULT);
+    }
+    return;
+  }
+
+  if(st===S.POINT) {
+    if((key==='Enter'||key===' ')&&elapsed()>60) {
+      if(gs.ballsPlayed>=gs.cfg.ballsCount) {
+        SFX.gameover(); setState(S.GAME_OVER); saveScores();
+      } else if(gs.withQ&&gs.questions.length>0) {
+        gs.currentQ=pickQ(); gs.qPhase='pre_serve';
+        gs.qAsker=gs.server; gs.qFirstWrong=false;
+        setState(S.QUESTION);
+      } else {
+        launchBall();
+      }
+    }
+    return;
+  }
+
+  if(st===S.GAME_OVER) {
+    if(key==='Enter') { loadScores(); setState(S.LEADERBOARD); }
+    if(key==='Escape') { initGame(); setState(S.TITLE); }
+    return;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  ⑭ GOOGLE SHEETS API
+// ══════════════════════════════════════════════════════════
+function fetchJSONP(url) {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'jsonp_' + Math.round(100000 * Math.random());
+    window[callbackName] = function(data) {
+      delete window[callbackName];
+      document.body.removeChild(script);
+      resolve(data);
+    };
+    const script = document.createElement('script');
+    script.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'callback=' + callbackName;
+    script.onerror = () => {
+      delete window[callbackName];
+      document.body.removeChild(script);
+      reject(new Error('Error al cargar JSONP desde ' + url));
+    };
+    document.body.appendChild(script);
+  });
+}
+
+async function loadFromSheets() {
+  let configData = null;
+  let questionsData = null;
+  let scoresData = null;
+
+  // Intento 1: Fetch estándar (CORS)
+  try {
+    const [cfgR, qR, scR] = await Promise.all([
+      fetch(APPS_SCRIPT_URL+'?action=config'),
+      fetch(APPS_SCRIPT_URL+'?action=questions'),
+      fetch(APPS_SCRIPT_URL+'?action=scores'),
+    ]);
+    if(cfgR.ok) {
+      const d = await cfgR.json();
+      if(d.ok) configData = d.data;
+    }
+    if(qR.ok) {
+      const d = await qR.json();
+      if(d.ok) questionsData = d.data;
+    }
+    if(scR.ok) {
+      const d = await scR.json();
+      if(d.ok) scoresData = d.data;
+    }
+  } catch(e) {
+    console.warn('[PONG] Fetch estándar falló (posible restricción file:// o CORS). Intentando JSONP...', e.message);
+  }
+
+  // Intento 2: Fallback a JSONP (Súper compatible con file://)
+  if (!configData || !questionsData || !scoresData) {
+    try {
+      const [cfgD, qD, scD] = await Promise.all([
+        fetchJSONP(APPS_SCRIPT_URL+'?action=config'),
+        fetchJSONP(APPS_SCRIPT_URL+'?action=questions'),
+        fetchJSONP(APPS_SCRIPT_URL+'?action=scores'),
+      ]);
+      if(cfgD && cfgD.ok) configData = cfgD.data;
+      if(qD && qD.ok) questionsData = qD.data;
+      if(scD && scD.ok) scoresData = scD.data;
+      console.log('[PONG] Carga exitosa mediante JSONP');
+    } catch(err2) {
+      console.error('[PONG] Fallback de JSONP también falló:', err2.message);
+    }
+  }
+
+  // Procesar configuración cargada
+  if (configData) {
+    const c = configData;
+    if(c.titleMain)  gs.cfg.titleMain  = c.titleMain;
+    if(c.titleSub)   gs.cfg.titleSub   = c.titleSub;
+    if(c.ballsCount) gs.cfg.ballsCount  = parseInt(c.ballsCount)||5;
+    if(c.night_bg)     THEMES.night.bg      = c.night_bg;
+    if(c.night_paddle) THEMES.night.paddle   = c.night_paddle;
+    if(c.night_ball)   THEMES.night.ball     = c.night_ball;
+    if(c.night_accent) THEMES.night.accent   = c.night_accent;
+    if(c.day_bg)       THEMES.day.bg         = c.day_bg;
+    if(c.day_paddle)   THEMES.day.paddle     = c.day_paddle;
+    if(c.day_ball)     THEMES.day.ball       = c.day_ball;
+    if(c.day_accent)   THEMES.day.accent     = c.day_accent;
+    gs.T=THEMES[gs.theme];
+  }
+
+  if (questionsData && questionsData.length) {
+    gs.questions = shuffle(questionsData);
+    console.log('[PONG] Preguntas reales cargadas desde Sheets:', gs.questions.length);
+  } else {
+    gs.questions = shuffle([...DEMO_Q]);
+    console.log('[PONG] Usando preguntas de demo (local).');
+  }
+
+  if (scoresData) {
+    gs.scores = scoresData;
+    console.log('[PONG] Scores cargados:', gs.scores.length);
+  }
+
+  setState(S.TITLE);
+}
+
+async function loadScores() {
+  try {
+    // Intentar con fetch estándar
+    const r=await fetch(APPS_SCRIPT_URL+'?action=scores');
+    if(r.ok){ const d=await r.json(); if(d.ok) { gs.scores=d.data; return; } }
+  } catch(e){}
+
+  // Fallback a JSONP
+  try {
+    const d = await fetchJSONP(APPS_SCRIPT_URL+'?action=scores');
+    if(d.ok) gs.scores = d.data;
+  } catch(e) {
+    console.warn('[PONG] No se pudieron cargar los scores de ninguna manera');
+  }
+}
+
+async function saveScores() {
+  for(const pl of gs.players) {
+    if(!pl.id || pl.id==='CPU') continue;
+    const params = new URLSearchParams({
+      action:   'saveScore',
+      playerID:  pl.id,
+      score:     pl.score,
+      errors:    pl.errors,
+      mode:      gs.mode==='1p'?'1P':'2P',
+      withQ:     gs.withQ?'con-preguntas':'clasico',
+      date:      new Date().toISOString().slice(0,10),
+    });
+    const url = `${APPS_SCRIPT_URL}?${params}`;
+    console.log('[PONG] saveScore URL →', url);
+
+    let saved = false;
+    // Intento 1: fetch GET con CORS estándar
+    try {
+      const r = await fetch(url, { redirect:'follow' });
+      const d = await r.json();
+      console.log('[PONG] saveScore respuesta (CORS):', d);
+      saved = d.ok === true;
+    } catch(e) {
+      console.warn('[PONG] fetch CORS falló, intentando con JSONP:', e.message);
+    }
+
+    // Intento 2: JSONP (Súper compatible con file://, sigue redirecciones)
+    if(!saved) {
+      try {
+        console.log('[PONG] Intentando guardar con JSONP...');
+        const d = await fetchJSONP(url);
+        saved = d.ok === true;
+        console.log('[PONG] Score guardado mediante JSONP');
+      } catch(err2) {
+        console.warn('[PONG] Guardado por JSONP falló:', err2.message);
+      }
+    }
+
+    // Intento 3: Image() — fallback heredado por compatibilidad
+    if(!saved) {
+      console.log('[PONG] Intentando con Image()...');
+      await new Promise(resolve => {
+        const img = new Image();
+        img.onload = img.onerror = () => { console.log('[PONG] Image() completado'); resolve(); };
+        img.src = url + '&_nocors=1';
+        setTimeout(resolve, 5000);
+      });
+    }
+  }
+
+  // Dar 2 segundos a Sheets para procesar antes de recargar
+  await new Promise(r => setTimeout(r, 2000));
+  await loadScores();
+  console.log('[PONG] Scores recargados:', gs.scores.length, 'entradas');
+}
+
+// ══════════════════════════════════════════════════════════
+//  ⑮ BUCLE PRINCIPAL
+// ══════════════════════════════════════════════════════════
+function loop() {
+  requestAnimationFrame(loop);
+  gs.frame++;
+  const st=gs.state;
+
+  if(st===S.LOADING)          { renderLoading();   return; }
+  if(st===S.TITLE)            { renderTitle();     return; }
+  if(st===S.MODE)             { renderMode();      return; }
+  if(st===S.PLAYER_ID)        { renderPlayerID();  return; }
+  if(st===S.Q_OPT)            { renderQOpt();      return; }
+  if(st===S.SORTING_Q||st===S.QUESTION) { renderQuestion(); return; }
+  if(st===S.SORTING_RESULT||st===S.Q_RESULT) {
+    renderQResult();
+    if(elapsed()>150) resumeFromQResult(); // auto-avance tras 2.5s
+    return;
+  }
+  if(st===S.PLAYING) {
+    updatePaddles();
+    updateBall();
+    renderPlaying();
+    // Pregunta aleatoria
+    if(gs.withQ&&gs.questions.length&&gs.frame>=gs.nextRandQ) {
+      gs.currentQ=pickQ(); gs.qPhase='random';
+      gs.qAsker=gs.lastHit; gs.qFirstWrong=false;
+      setState(S.QUESTION);
+    }
+    return;
+  }
+  if(st===S.POINT)       { renderPoint();       return; }
+  if(st===S.GAME_OVER)   { renderGameOver();    return; }
+  if(st===S.LEADERBOARD) { renderLeaderboard(); return; }
+}
+
+// ══════════════════════════════════════════════════════════
+//  ⑯ INICIO
+// ══════════════════════════════════════════════════════════
+setState(S.LOADING);
+loadFromSheets();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
