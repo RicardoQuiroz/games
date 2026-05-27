@@ -15,7 +15,7 @@ body {
   height:100vh; overflow:hidden;
   font-family:'Orbitron',sans-serif;
 }
-canvas { display:block; }
+canvas { display:block; touch-action:none; user-select:none; -webkit-user-select:none; }
 </style>
 </head>
 <body>
@@ -119,6 +119,7 @@ const gs = {
   idCursor:  0,
   keys:      {},
   qImages:   {},    // caché de imágenes cargadas
+  activePointers: {}, // punteros táctiles/ratón activos
 };
 
 // ── helpers de tiempo ──────────────────────────────────
@@ -308,12 +309,31 @@ function updateBall() {
 function updatePaddles() {
   const p=gs.pads, sp=6+gs.ballsPlayed*0.15;
 
-  // J1 (izquierda)
+  let j1Keyboard = false;
+  let j2Keyboard = false;
+
+  // J1 (izquierda) keyboard control
   if(gs.mode==='1p') {
-    p[0].dy = gs.keys['ArrowUp']?-sp : gs.keys['ArrowDown']?sp : 0;
+    if (gs.keys['ArrowUp'] || gs.keys['ArrowDown']) {
+      p[0].dy = gs.keys['ArrowUp']?-sp : sp;
+      j1Keyboard = true;
+    } else {
+      p[0].dy = 0;
+    }
   } else {
-    p[0].dy = (gs.keys['w']||gs.keys['W'])?-sp : (gs.keys['s']||gs.keys['S'])?sp : 0;
-    p[1].dy = gs.keys['ArrowUp']?-sp : gs.keys['ArrowDown']?sp : 0;
+    if (gs.keys['w']||gs.keys['W']||gs.keys['s']||gs.keys['S']) {
+      p[0].dy = (gs.keys['w']||gs.keys['W'])?-sp : sp;
+      j1Keyboard = true;
+    } else {
+      p[0].dy = 0;
+    }
+    
+    if (gs.keys['ArrowUp'] || gs.keys['ArrowDown']) {
+      p[1].dy = gs.keys['ArrowUp']?-sp : sp;
+      j2Keyboard = true;
+    } else {
+      p[1].dy = 0;
+    }
   }
 
   // CPU (derecha en modo 1P)
@@ -324,8 +344,26 @@ function updatePaddles() {
     p[1].dy = Math.abs(diff)>4 ? Math.sign(diff)*cspd : 0;
   }
 
-  for(const pad of gs.pads) {
-    pad.y=Math.max(0, Math.min(LH-pad.h, pad.y+pad.dy));
+  // Apply keyboard movement
+  if (j1Keyboard) {
+    p[0].y=Math.max(0, Math.min(LH-p[0].h, p[0].y+p[0].dy));
+  }
+  if (j2Keyboard || gs.mode==='1p') {
+    p[1].y=Math.max(0, Math.min(LH-p[1].h, p[1].y+p[1].dy));
+  }
+
+  // Apply touch / pointer control
+  for (const id in gs.activePointers) {
+    const pointer = gs.activePointers[id];
+    if (pointer.x < LW / 2) {
+      if (!j1Keyboard) {
+        p[0].y = Math.max(0, Math.min(LH - p[0].h, pointer.y - p[0].h / 2));
+      }
+    } else {
+      if (gs.mode === '2p' && !j2Keyboard) {
+        p[1].y = Math.max(0, Math.min(LH - p[1].h, pointer.y - p[1].h / 2));
+      }
+    }
   }
 }
 
@@ -386,9 +424,10 @@ function renderPlayerID() {
   ctx.strokeRect(LW/2-130,238,260,48);
   txt(inp+blink, LW/2, 271, 30, gs.T.score, 'center');
   if(inp.length>=6)
-    txt('✓  ENTER para confirmar', LW/2, 310, 14, gs.T.accent, 'center');
+    txt('✓  OK/ENTER para confirmar', LW/2, 310, 14, gs.T.accent, 'center');
   else
     txt(`${6-inp.length} dígito${6-inp.length!==1?'s':''} más`, LW/2, 310, 13, gs.T.hud, 'center');
+  drawNumpad();
 }
 
 // — Opción de preguntas —
@@ -614,6 +653,33 @@ function initGame() {
 // ══════════════════════════════════════════════════════════
 //  ⑬ INPUT
 // ══════════════════════════════════════════════════════════
+canvas.addEventListener('pointerdown', e => {
+  ensureAudio();
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const px = (e.clientX - rect.left) * scaleX;
+  const py = (e.clientY - rect.top) * scaleY;
+  gs.activePointers[e.pointerId] = { x: px, y: py };
+  onTap(px, py);
+});
+
+canvas.addEventListener('pointermove', e => {
+  if (gs.activePointers[e.pointerId]) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    gs.activePointers[e.pointerId] = {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY
+    };
+  }
+});
+
+const releasePointer = e => { delete gs.activePointers[e.pointerId]; };
+canvas.addEventListener('pointerup', releasePointer);
+canvas.addEventListener('pointercancel', releasePointer);
+
 document.addEventListener('keydown', e=>{
   gs.keys[e.key]=true;
   ensureAudio();
@@ -622,6 +688,183 @@ document.addEventListener('keydown', e=>{
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
 });
 document.addEventListener('keyup', e=>{ gs.keys[e.key]=false; });
+
+function confirmQOpt() {
+  gs.withQ = gs.menuSel === 0 && gs.questions.length > 0;
+  initGame();
+  gs.players[0].id = gs.idInputs[0];
+  gs.players[1].id = gs.mode==='2p' ? gs.idInputs[1] : 'CPU';
+  if(gs.withQ) {
+    gs.currentQ = pickQ(); gs.qPhase = 'sorting';
+    gs.qAsker = 0; gs.qFirstWrong = false;
+    setState(S.SORTING_Q);
+  } else {
+    gs.server = Math.random() < 0.5 ? 0 : 1;
+    startRound();
+  }
+}
+
+function drawNumpad() {
+  const keys = [
+    ['1', '2', '3'],
+    ['4', '5', '6'],
+    ['7', '8', '9'],
+    ['CLR', '0', 'OK']
+  ];
+  const bw = 88, bh = 40, gap = 10;
+  const startX = LW/2 - 150;
+  const startY = 340;
+
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 3; c++) {
+      const bx = startX + c * (bw + gap);
+      const by = startY + r * (bh + gap);
+      const key = keys[r][c];
+
+      ctx.strokeStyle = gs.T.net;
+      ctx.lineWidth = 1;
+      const inp = gs.idInputs[gs.idCursor];
+      const isOK = key === 'OK';
+      
+      let fillCol = 'rgba(0,0,0,0.2)';
+      let textCol = gs.T.text;
+      
+      if (isOK && inp.length >= 6) {
+        ctx.strokeStyle = gs.T.accent;
+        fillCol = gs.T.accent + '22';
+        textCol = gs.T.accent;
+      }
+      
+      ctx.fillStyle = fillCol;
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeRect(bx, by, bw, bh);
+
+      txt(key, bx + bw/2, by + 26, isOK ? 14 : 16, textCol, 'center');
+    }
+  }
+}
+
+function hitNumpad(x, y) {
+  const keys = [
+    ['1', '2', '3'],
+    ['4', '5', '6'],
+    ['7', '8', '9'],
+    ['Backspace', '0', 'Enter']
+  ];
+  const bw = 88, bh = 40, gap = 10;
+  const startX = LW/2 - 150;
+  const startY = 340;
+
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 3; c++) {
+      const bx = startX + c * (bw + gap);
+      const by = startY + r * (bh + gap);
+      if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
+        return keys[r][c];
+      }
+    }
+  }
+  return null;
+}
+
+function onTap(x, y) {
+  const st = gs.state;
+
+  if (st === S.TITLE) {
+    setState(S.MODE);
+    return;
+  }
+
+  if (st === S.MODE) {
+    if (y >= 210 && y < 282) {
+      gs.mode = '1p';
+      gs.idInputs = ['', '']; gs.idCursor = 0;
+      setState(S.PLAYER_ID);
+    } else if (y >= 282 && y <= 350) {
+      gs.mode = '2p';
+      gs.idInputs = ['', '']; gs.idCursor = 0;
+      setState(S.PLAYER_ID);
+    }
+    return;
+  }
+
+  if (st === S.PLAYER_ID) {
+    const key = hitNumpad(x, y);
+    if (key) onKey(key);
+    return;
+  }
+
+  if (st === S.Q_OPT) {
+    if (y >= 230 && y < 300) {
+      gs.menuSel = 0;
+      confirmQOpt();
+    } else if (y >= 300 && y <= 370) {
+      gs.menuSel = 1;
+      confirmQOpt();
+    }
+    return;
+  }
+
+  if (st === S.SORTING_Q || st === S.QUESTION) {
+    const q = gs.currentQ;
+    if (!q) return;
+    let yc = 90;
+    if (q.imageUrl) {
+      const im = gs.qImages[q.id];
+      if (im && im.complete && im.naturalWidth > 0) {
+        const ih = 110;
+        yc += ih + 10;
+      }
+    }
+    ctx.font = `19px 'Orbitron',sans-serif`;
+    const words = q.question.split(' ');
+    let line = '';
+    let ly = yc;
+    for (const w of words) {
+      const t = line + (line ? ' ' : '') + w;
+      if (ctx.measureText(t).width > (LW - 80) && line) {
+        line = w; ly += 24;
+      } else {
+        line = t;
+      }
+    }
+    yc = ly + 24 + 8;
+
+    const opts = getQOptions(q);
+    for (let i = 0; i < opts.length; i++) {
+      const optY = yc + i * 46;
+      if (y >= optY - 6 && y <= optY + 32 && x >= 50 && x <= LW - 50) {
+        const chosen = ['a', 'b', 'c', 'd'][i];
+        handleAnswerResult(chosen === q.correct, st === S.SORTING_Q ? S.SORTING_RESULT : S.Q_RESULT);
+        break;
+      }
+    }
+    return;
+  }
+
+  if (st === S.POINT) {
+    if (elapsed() > 60) {
+      onKey('Enter');
+    }
+    return;
+  }
+
+  if (st === S.GAME_OVER) {
+    if (y >= 350 && y <= 500) {
+      if (x < LW / 2) {
+        onKey('Enter');
+      } else {
+        onKey('Escape');
+      }
+    }
+    return;
+  }
+
+  if (st === S.LEADERBOARD) {
+    onKey('Escape');
+    return;
+  }
+}
 
 function onKey(key) {
   // Toggle tema
@@ -671,19 +914,7 @@ function onKey(key) {
     if(key==='ArrowUp')   gs.menuSel=Math.max(0,gs.menuSel-1);
     if(key==='ArrowDown') gs.menuSel=Math.min(1,gs.menuSel+1);
     if(key==='Enter') {
-      gs.withQ=gs.menuSel===0&&gs.questions.length>0;
-      // Fijar IDs y resetear marcadores SIEMPRE, en ambas ramas
-      initGame();
-      gs.players[0].id = gs.idInputs[0];
-      gs.players[1].id = gs.mode==='2p' ? gs.idInputs[1] : 'CPU';
-      if(gs.withQ) {
-        gs.currentQ=pickQ(); gs.qPhase='sorting';
-        gs.qAsker=0; gs.qFirstWrong=false;
-        setState(S.SORTING_Q);
-      } else {
-        gs.server=Math.random()<0.5?0:1;
-        startRound();
-      }
+      confirmQOpt();
     }
     return;
   }
